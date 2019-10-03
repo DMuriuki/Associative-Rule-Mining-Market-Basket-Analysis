@@ -1,0 +1,200 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+rm(list=ls())
+#Reading in Data
+install.packages("R.utils")
+library(R.utils)
+install.packages("data.table")
+library(data.table)
+aisle<-fread(file.choose(),header=TRUE)
+head(aisle, n=10)
+departments<-fread(file.choose(),header=TRUE)
+head(departments)
+orders<-fread(file.choose(), header=TRUE)
+order_products<-fread(file.choose(),header=TRUE)
+order_products_prior<-fread(file.choose(), header=TRUE)
+products<-fread(file.choose(), header=TRUE)
+
+```
+
+```{r}
+#Peek into dataset
+head(order_products)
+str(order_products)
+```
+
+```{r}
+head(products)
+str(products)
+```
+
+
+```{r}
+str(aisle)
+paste(sort(head(aisle$aisle)), collapse=', ')
+```
+```{r}
+head(departments, n=10)
+str(departments)
+paste(sort(departments$department), collapse = ', ')
+```
+```{r}
+install.packages("gridExtra")
+library(gridExtra)
+library(tidyverse)
+library(ggplot2)
+tmp = order_products %>%
+  left_join(products) %>%
+  group_by(product_name) %>%
+  summarize(count=n()) %>%
+  top_n(n=30, wt=count) %>%  mutate(percentage=count/sum(count))
+p1 = ggplot (tmp, aes(x=reorder(product_name,count), y=percentage)) +  
+  geom_col(fill="cornflowerblue") + ggtitle(' Top 30 Products') + ylab('Percentage of Orders') +
+  theme (
+    axis.text.x=element_text(angle=90, hjust=1, vjust=0.5),
+    axis.title.x = element_blank()) 
+p2 = ggplot (data = tmp, aes( x= '', y=percentage )) + 
+  ggtitle(' Top 30 Products') + ylab('percentage.of.orders') + geom_boxplot(color="blue") + xlab('Products')
+grid.arrange(p1, p2, ncol = 2)
+```
+
+```{r}
+tmp = order_products %>%
+  left_join(products) %>%
+  left_join(departments) %>%
+  group_by(department) %>%
+  summarize(count=n()) %>%
+  mutate(percentage=count/sum(count))
+p1 = ggplot (tmp, aes(x=reorder(department,count), y=percentage)) +  
+  geom_col(fill="red") + ggtitle('Departments') + ylab('Percentage of Orders') +
+  theme (
+    axis.text.x=element_text(angle=90, hjust=1, vjust=0.5),
+    axis.title.x = element_blank()) 
+p2 = ggplot (data = tmp, aes( x= '', y=percentage )) + 
+  ggtitle('Departments') + ylab('percentage.of.orders') + geom_boxplot(color="blue") + xlab('Departments')
+grid.arrange(p1, p2, ncol = 2)
+```
+
+```{r}
+tmp = order_products %>%
+  left_join(products) %>%
+  left_join(aisle) %>%
+  group_by(aisle) %>%
+  summarize(count=n()) %>%
+  top_n(n=30, wt=count) %>%  mutate(percentage=count/sum(count))
+p1 = ggplot (tmp, aes(x=reorder(aisle,count), y=percentage)) +  
+  geom_col(fill="purple") + ggtitle('Aisles Top 30') + ylab('Percentage of Orders') +
+  theme (
+    axis.text.x=element_text(angle=90, hjust=1, vjust=0.5),
+    axis.title.x = element_blank()) +  ylab('Percentage of Orders') + xlab('Aisles')
+p2 = ggplot (tmp, aes( x= '', y=percentage )) + 
+  ggtitle('Aisles Top 30') + ylab('percentage.of.orders') + geom_boxplot(color="blue") + xlab('Aisles')
+grid.arrange(p1, p2, ncol = 2)
+```
+
+```{r}
+order_products_prior %>%
+  left_join(orders) %>%
+  group_by(order_dow) %>%
+  summarize(count = n()) %>%
+  mutate(percentage=count/sum(count)) %>%
+  ggplot (aes(x=as.factor(order_dow), y=percentage)) + 
+    geom_col(fill="coral")+ xlab("Day of Week")+ ylab('Percentage of Orders') + ggtitle('Daily Orders')
+```
+
+```{r}
+order_products_prior %>% 
+  left_join(orders) %>% left_join(products) %>%
+  group_by(order_dow, product_name) %>%
+  summarize(n=n()) %>%
+  mutate(percentage=n/sum(n)) %>%
+  top_n(10, wt=n) %>%
+  ggplot (aes(x=as.factor(order_dow), y=percentage, fill=product_name)) + 
+    geom_col() + ylab('Proprtion of Orders') + ggtitle('Daily Top 10 Products Ordered') +
+    theme(legend.position="bottom",legend.direction="horizontal")
+```
+
+
+
+```
+
+
+```{r}
+basket_data = left_join(order_products_prior, products, by='product_id')
+head(basket_data)
+```
+
+
+```{r}
+basket_data = group_by(basket_data, order_id)
+basket_data=summarise(basket_data,items=as.vector(list(product_name)))
+View(basket_data)
+class(basket_data)
+```
+
+```{r}
+#Installation of Arules package
+install.packages("arules")
+library(arules)
+```
+
+
+
+```{r}
+
+transactions=as(basket_data$items, 'transactions')
+head(transactions)
+summary(transactions)
+```
+
+
+```{r}
+basket_rules <- apriori(transactions, parameter = list(support = 0.0005, confidence = 0.30, minlen = 2))
+basket_rules
+```
+
+```{r}
+summary(basket_rules)
+```
+
+```{r}
+inspect(basket_rules[1:5])
+```
+
+```{r}
+inspect(sort(basket_rules, by='lift')[1:5])
+```
+
+```{r}
+blueberry_rules <- subset(basket_rules,items %in% "Almond Milk Blueberry Yogurt")
+inspect(blueberry_rules)
+
+```
+
+```{r}
+rules<- subset(basket_rules,confidence > 0.6)
+inspect(rules)
+```
+
+```{r}
+write(basket_rules, file = "basketrules.csv",
+        sep = ",", quote = TRUE, row.names = FALSE)
+
+```
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
